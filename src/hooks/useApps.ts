@@ -5,6 +5,7 @@ import {
   createApp as createAppApi,
   deleteApp as deleteAppApi,
   listApps,
+  refreshApp as refreshAppApi,
   updateApp as updateAppApi,
 } from '../api/apps'
 
@@ -76,6 +77,14 @@ export function useApps(options?: { refreshIntervalMs?: number }) {
       deleteApp: async (id: number) => {
         await deleteAppApi(id)
         setState((s) => ({ ...s, apps: s.apps.filter((a) => a.id !== id) }))
+      },
+      refreshApp: async (id: number) => {
+        const updated = await refreshAppApi(id)
+        setState((s) => ({
+          ...s,
+          apps: s.apps.map((a) => (a.id === id ? updated : a)),
+        }))
+        return updated
       },
     }
   }, [refresh, state.apps, state.error, state.loading])

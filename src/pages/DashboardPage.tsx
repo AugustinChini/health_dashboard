@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import type { AppRecord, AppStatus } from '../api/apps'
 import { useApps } from '../hooks/useApps'
@@ -32,9 +33,11 @@ function statusTone(status: AppStatus) {
 }
 
 export default function DashboardPage() {
-  const { apps, loading, error } = useApps({ refreshIntervalMs: 10_000 })
+  const navigate = useNavigate()
+  const { apps, loading, error, refreshApp } = useApps({ refreshIntervalMs: 10_000 })
   const [query, setQuery] = useState('')
   const [onlyIssues, setOnlyIssues] = useState(false)
+  const [refreshingIds, setRefreshingIds] = useState<Set<number>>(() => new Set())
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -156,11 +159,32 @@ export default function DashboardPage() {
               </div>
 
               <div className="appCard__footer">
-                <button className="btn" type="button" disabled>
+                <button className="btn" type="button" onClick={() => navigate(`/apps/${app.id}`)}>
                   Details
                 </button>
-                <button className="btn btn--ghost" type="button" disabled>
-                  Retry
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  disabled={refreshingIds.has(app.id)}
+                  onClick={() => {
+                    setRefreshingIds((prev) => {
+                      const next = new Set(prev)
+                      next.add(app.id)
+                      return next
+                    })
+
+                    refreshApp(app.id)
+                      .catch(() => {})
+                      .finally(() => {
+                        setRefreshingIds((prev) => {
+                          const next = new Set(prev)
+                          next.delete(app.id)
+                          return next
+                        })
+                      })
+                  }}
+                >
+                  {refreshingIds.has(app.id) ? 'Retrying…' : 'Retry'}
                 </button>
               </div>
             </article>

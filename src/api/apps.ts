@@ -17,6 +17,22 @@ export type AppRecord = {
   updatedAt: string
 }
 
+export type IncidentRecord = {
+  id: number
+  appId: number
+  startedAt: string
+  endedAt: string | null
+
+  startStatus: Exclude<AppStatus, 'ok' | 'unknown'>
+  startHttpCode: number | null
+  startLatencyMs: number | null
+  startError: string | null
+  startResponseSnippet: string | null
+
+  createdAt: string
+  updatedAt: string
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: {
@@ -36,6 +52,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function listApps(): Promise<AppRecord[]> {
   return request<AppRecord[]>('/api/apps')
+}
+
+export async function getApp(id: number): Promise<AppRecord> {
+  return request<AppRecord>(`/api/apps/${id}`)
+}
+
+export async function getAppIncidents(id: number, year: number): Promise<{ year: number; incidents: IncidentRecord[] }> {
+  return request<{ year: number; incidents: IncidentRecord[] }>(
+    `/api/apps/${id}/incidents?year=${encodeURIComponent(String(year))}`,
+  )
 }
 
 export async function createApp(input: {
@@ -65,4 +91,10 @@ export async function deleteApp(id: number): Promise<void> {
     const text = await res.text().catch(() => '')
     throw new Error(text || `Delete failed: ${res.status}`)
   }
+}
+
+export async function refreshApp(id: number): Promise<AppRecord> {
+  return request<AppRecord>(`/api/apps/${id}/refresh`, {
+    method: 'POST',
+  })
 }

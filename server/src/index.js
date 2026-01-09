@@ -4,7 +4,7 @@ import cors from 'cors'
 
 import { openDb, seedIfEmpty } from './db.js'
 import { createEmailClientFromEnv } from './email.js'
-import { createPoller } from './poller.js'
+import { checkAndPersistApp, createPoller } from './poller.js'
 
 dotenv.config()
 
@@ -40,6 +40,22 @@ function normalizeAppRow(row) {
   }
 }
 
+function normalizeIncidentRow(row) {
+  return {
+    id: row.id,
+    appId: row.appId,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    startStatus: row.startStatus,
+    startHttpCode: row.startHttpCode,
+    startLatencyMs: row.startLatencyMs,
+    startError: row.startError,
+    startResponseSnippet: row.startResponseSnippet,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
@@ -47,6 +63,60 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/apps', async (_req, res) => {
   const rows = await db.all('SELECT * FROM apps ORDER BY id DESC')
   res.json(rows.map(normalizeAppRow))
+})
+
+app.get('/api/apps/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: 'invalid id' })
+    return
+  }
+
+  const row = await db.get('SELECT * FROM apps WHERE id = ?', [id])
+  if (!row) {
+    res.status(404).json({ error: 'not found' })
+    return
+  }
+
+  res.json(normalizeAppRow(row))
+})
+
+app.get('/api/apps/:id/incidents', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: 'invalid id' })
+    return
+  }
+
+  const yearRaw = req.query.year
+  const year = yearRaw != null ? Number(yearRaw) : new Date().getUTCFullYear()
+  if (!Number.isFinite(year) || year < 1970 || year > 9999) {
+    res.status(400).json({ error: 'invalid year' })
+    return
+  }
+
+  const appRow = await db.get('SELECT id FROM apps WHERE id = ?', [id])
+  if (!appRow) {
+    res.status(404).json({ error: 'not found' })
+    return
+  }
+
+  const start = new Date(Date.UTC(year, 0, 1, 0, 0, 0)).toISOString()
+  const end = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0)).toISOString()
+
+  const rows = await db.all(
+    `SELECT * FROM incidents
+     WHERE appId = ?
+       AND (
+         (startedAt >= ? AND startedAt < ?)
+         OR (endedAt IS NOT NULL AND endedAt >= ? AND endedAt < ?)
+         OR (startedAt < ? AND (endedAt IS NULL OR endedAt >= ?))
+       )
+     ORDER BY startedAt DESC`,
+    [id, start, end, start, end, start, start],
+  )
+
+  res.json({ year, incidents: rows.map(normalizeIncidentRow) })
 })
 
 app.post('/api/apps', async (req, res) => {
@@ -114,6 +184,31 @@ app.delete('/api/apps/:id', async (req, res) => {
 
   await db.run('DELETE FROM apps WHERE id = ?', [id])
   res.status(204).end()
+})
+
+app.post('/api/apps/:id/refresh', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: 'invalid id' })
+    return
+  }
+
+  const existing = await db.get('SELECT * FROM apps WHERE id = ?', [id])
+  if (!existing) {
+    res.status(404).json({ error: 'not found' })
+    return
+  }
+
+  const row = await checkAndPersistApp({
+    db,
+    app: existing,
+    timeoutMs: REQUEST_TIMEOUT_MS,
+    emailClient,
+    logger: console,
+    notify: false,
+  })
+
+  res.json(normalizeAppRow(row))
 })
 
 const poller = createPoller({

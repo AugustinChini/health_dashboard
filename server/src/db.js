@@ -8,6 +8,7 @@ export async function openDb(dbPath) {
   })
 
   await db.exec(`
+    PRAGMA foreign_keys = ON;
     PRAGMA journal_mode = WAL;
 
     CREATE TABLE IF NOT EXISTS apps (
@@ -27,6 +28,29 @@ export async function openDb(dbPath) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_apps_status ON apps(status);
+
+    CREATE TABLE IF NOT EXISTS incidents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      appId INTEGER NOT NULL,
+
+      startedAt TEXT NOT NULL,
+      endedAt TEXT,
+
+      startStatus TEXT NOT NULL,
+
+      startHttpCode INTEGER,
+      startLatencyMs INTEGER,
+      startError TEXT,
+      startResponseSnippet TEXT,
+
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+
+      FOREIGN KEY(appId) REFERENCES apps(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_incidents_app_started ON incidents(appId, startedAt);
+    CREATE INDEX IF NOT EXISTS idx_incidents_app_open ON incidents(appId, endedAt);
   `)
 
   return db

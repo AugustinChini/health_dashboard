@@ -3,6 +3,7 @@ import './App.css'
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
 
 import AppsPage from './pages/AppsPage'
+import AppDetailsPage from './pages/AppDetailsPage'
 import DashboardPage from './pages/DashboardPage'
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/apps" element={<AppsPage />} />
+            <Route path="/apps/:id" element={<AppDetailsPage />} />
           </Routes>
         </main>
       </div>
