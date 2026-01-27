@@ -1,6 +1,6 @@
 import './App.css'
 
-import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { HashRouter, NavLink, Route, Routes } from 'react-router-dom'
 
 import AppsPage from './pages/AppsPage'
 import AppDetailsPage from './pages/AppDetailsPage'
@@ -8,7 +8,7 @@ import DashboardPage from './pages/DashboardPage'
 
 function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <div className="page">
         <header className="topbar">
           <div className="topbar__title">
@@ -46,7 +46,7 @@ function App() {
           </Routes>
         </main>
       </div>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
 
