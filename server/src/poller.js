@@ -143,6 +143,18 @@ export async function checkAndPersistApp({
     const shouldSendEmail = channel === "email" || channel === "both";
     const shouldSendPush = channel === "push" || channel === "both";
 
+    logger?.info?.("notification_dispatch_decision", {
+      appId: app.id,
+      appName: app.name,
+      fromStatus: prevStatus,
+      toStatus: nextStatus,
+      channel,
+      shouldSendEmail,
+      shouldSendPush,
+      pushEnabled: Boolean(pushClient?.enabled),
+      emailEnabled: Boolean(emailClient?.enabled),
+    });
+
     try {
       const updated = {
         ...app,
@@ -154,18 +166,34 @@ export async function checkAndPersistApp({
       };
 
       if (shouldSendEmail) {
+        logger?.info?.("email_send_start", {
+          appId: updated.id,
+          appName: updated.name,
+        });
         await emailClient.sendTransitionEmail({
           app: updated,
           fromStatus: prevStatus,
           toStatus: nextStatus,
         });
+        logger?.info?.("email_send_done", {
+          appId: updated.id,
+          appName: updated.name,
+        });
       }
 
       if (shouldSendPush) {
+        logger?.info?.("push_send_start", {
+          appId: updated.id,
+          appName: updated.name,
+        });
         await pushClient.sendTransitionPush({
           app: updated,
           fromStatus: prevStatus,
           toStatus: nextStatus,
+        });
+        logger?.info?.("push_send_done", {
+          appId: updated.id,
+          appName: updated.name,
         });
       }
     } catch (e) {
