@@ -4,6 +4,7 @@ import cors from "cors";
 
 import { openDb, seedIfEmpty } from "./db.js";
 import { createEmailClientFromEnv } from "./email.js";
+import { createPushClientFromEnv } from "./push.js";
 import { checkAndPersistApp, createPoller } from "./poller.js";
 
 dotenv.config();
@@ -25,6 +26,9 @@ const db = await openDb(DB_PATH);
 await seedIfEmpty(db);
 
 const emailClient = createEmailClientFromEnv();
+const pushClient = createPushClientFromEnv({ db });
+
+const notificationChannels = new Set(["email", "push", "both"]);
 
 function normalizeAppRow(row) {
   return {
@@ -60,6 +64,87 @@ function normalizeIncidentRow(row) {
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/notification-settings", async (_req, res) => {
+  const row = await db.get(
+    "SELECT channel, createdAt, updatedAt FROM notification_settings WHERE id = 1",
+  );
+  res.json({
+    channel: row?.channel || "email",
+    createdAt: row?.createdAt ?? null,
+    updatedAt: row?.updatedAt ?? null,
+  });
+});
+
+app.put("/notification-settings", async (req, res) => {
+  const channelRaw = req.body?.channel;
+  const channel = String(channelRaw || "")
+    .trim()
+    .toLowerCase();
+
+  if (!notificationChannels.has(channel)) {
+    res
+      .status(400)
+      .json({ error: "channel must be one of: email, push, both" });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  await db.run(
+    `UPDATE notification_settings
+     SET channel = ?, updatedAt = ?
+     WHERE id = 1`,
+    [channel, now],
+  );
+
+  const row = await db.get(
+    "SELECT channel, createdAt, updatedAt FROM notification_settings WHERE id = 1",
+  );
+  res.json({
+    channel: row?.channel || channel,
+    createdAt: row?.createdAt ?? null,
+    updatedAt: row?.updatedAt ?? now,
+  });
+});
+
+app.post("/notification-push/register", async (req, res) => {
+  const token = String(req.body?.token || "").trim();
+  const deviceLabelRaw = req.body?.deviceLabel;
+  const deviceLabel =
+    deviceLabelRaw == null || String(deviceLabelRaw).trim().length === 0
+      ? null
+      : String(deviceLabelRaw).trim();
+
+  if (!token) {
+    res.status(400).json({ error: "token is required" });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  await db.run(
+    `INSERT INTO push_tokens (token, deviceLabel, isActive, createdAt, updatedAt, lastUsedAt)
+     VALUES (?, ?, 1, ?, ?, ?)
+     ON CONFLICT(token) DO UPDATE SET
+       deviceLabel = excluded.deviceLabel,
+       isActive = 1,
+       updatedAt = excluded.updatedAt,
+       lastUsedAt = excluded.lastUsedAt`,
+    [token, deviceLabel, now, now, now],
+  );
+
+  res.status(201).json({ ok: true });
+});
+
+app.post("/notification-push/unregister", async (req, res) => {
+  const token = String(req.body?.token || "").trim();
+  if (!token) {
+    res.status(400).json({ error: "token is required" });
+    return;
+  }
+
+  await pushClient.deactivateTokens([token]);
+  res.status(200).json({ ok: true });
 });
 
 app.get("/apps", async (_req, res) => {
@@ -209,6 +294,7 @@ app.post("/apps/:id/refresh", async (req, res) => {
     app: existing,
     timeoutMs: REQUEST_TIMEOUT_MS,
     emailClient,
+    pushClient,
     logger: console,
     notify: false,
   });
@@ -220,6 +306,7 @@ const poller = createPoller({
   db,
   timeoutMs: REQUEST_TIMEOUT_MS,
   emailClient,
+  pushClient,
   logger: console,
 });
 
@@ -240,4 +327,5 @@ app.listen(PORT, () => {
     `poll interval: ${POLL_INTERVAL_MS}ms, timeout: ${REQUEST_TIMEOUT_MS}ms`,
   );
   console.log(`email enabled: ${emailClient.enabled}`);
+  console.log(`push enabled: ${pushClient.enabled}`);
 });

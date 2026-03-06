@@ -1,11 +1,11 @@
-import sqlite3 from 'sqlite3'
-import { open } from 'sqlite'
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 
 export async function openDb(dbPath) {
   const db = await open({
     filename: dbPath,
     driver: sqlite3.Database,
-  })
+  });
 
   await db.exec(`
     PRAGMA foreign_keys = ON;
@@ -51,31 +51,57 @@ export async function openDb(dbPath) {
 
     CREATE INDEX IF NOT EXISTS idx_incidents_app_started ON incidents(appId, startedAt);
     CREATE INDEX IF NOT EXISTS idx_incidents_app_open ON incidents(appId, endedAt);
-  `)
 
-  return db
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      channel TEXT NOT NULL DEFAULT 'email',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS push_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      deviceLabel TEXT,
+      isActive INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      lastUsedAt TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_push_tokens_active ON push_tokens(isActive);
+  `);
+
+  const now = new Date().toISOString();
+  await db.run(
+    `INSERT OR IGNORE INTO notification_settings (id, channel, createdAt, updatedAt)
+     VALUES (1, 'email', ?, ?)`,
+    [now, now],
+  );
+
+  return db;
 }
 
 export async function seedIfEmpty(db) {
-  const row = await db.get('SELECT COUNT(1) AS count FROM apps')
-  if (!row || row.count > 0) return
+  const row = await db.get("SELECT COUNT(1) AS count FROM apps");
+  if (!row || row.count > 0) return;
 
-  const now = new Date().toISOString()
+  const now = new Date().toISOString();
 
   const seed = [
-    ['Billing API', 'https://billing.myapp.fr/health', 'prod'],
-    ['Auth Service', 'https://auth.myapp.fr/health', 'prod'],
-    ['Customer Portal', 'https://portal.myapp.fr/health', 'prod'],
-    ['Analytics', 'https://analytics.myapp.fr/health', 'staging'],
-    ['Inventory Worker', 'https://inventory.myapp.fr/health', 'staging'],
-    ['Email Dispatcher', 'https://mailer.myapp.fr/health', 'dev'],
-  ]
+    ["Billing API", "https://billing.myapp.fr/health", "prod"],
+    ["Auth Service", "https://auth.myapp.fr/health", "prod"],
+    ["Customer Portal", "https://portal.myapp.fr/health", "prod"],
+    ["Analytics", "https://analytics.myapp.fr/health", "staging"],
+    ["Inventory Worker", "https://inventory.myapp.fr/health", "staging"],
+    ["Email Dispatcher", "https://mailer.myapp.fr/health", "dev"],
+  ];
 
   for (const [name, url, environment] of seed) {
     await db.run(
       `INSERT INTO apps (name, url, environment, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?)` ,
+       VALUES (?, ?, ?, ?, ?)`,
       [name, url, environment, now, now],
-    )
+    );
   }
 }

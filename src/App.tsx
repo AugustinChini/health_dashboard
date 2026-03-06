@@ -1,10 +1,11 @@
-import './App.css'
+import "./App.css";
 
-import { HashRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { HashRouter, NavLink, Route, Routes } from "react-router-dom";
 
-import AppsPage from './pages/AppsPage'
-import AppDetailsPage from './pages/AppDetailsPage'
-import DashboardPage from './pages/DashboardPage'
+import AppsPage from "./pages/AppsPage";
+import AppDetailsPage from "./pages/AppDetailsPage";
+import DashboardPage from "./pages/DashboardPage";
+import NotificationsPage from "./pages/NotificationsPage";
 
 function App() {
   return (
@@ -25,15 +26,27 @@ function App() {
             <NavLink
               to="/"
               end
-              className={({ isActive }) => (isActive ? 'nav__link nav__link--active' : 'nav__link')}
+              className={({ isActive }) =>
+                isActive ? "nav__link nav__link--active" : "nav__link"
+              }
             >
               Dashboard
             </NavLink>
             <NavLink
               to="/apps"
-              className={({ isActive }) => (isActive ? 'nav__link nav__link--active' : 'nav__link')}
+              className={({ isActive }) =>
+                isActive ? "nav__link nav__link--active" : "nav__link"
+              }
             >
               Apps
+            </NavLink>
+            <NavLink
+              to="/notifications"
+              className={({ isActive }) =>
+                isActive ? "nav__link nav__link--active" : "nav__link"
+              }
+            >
+              Notifications
             </NavLink>
           </nav>
         </header>
@@ -42,12 +55,13 @@ function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/apps" element={<AppsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/apps/:id" element={<AppDetailsPage />} />
           </Routes>
         </main>
       </div>
     </HashRouter>
-  )
+  );
 }
 
-export default App
+export default App;

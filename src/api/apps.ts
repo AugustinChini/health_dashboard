@@ -1,5 +1,6 @@
 export type Environment = "prod" | "staging" | "dev";
 export type AppStatus = "ok" | "fail" | "timeout" | "unknown";
+export type NotificationChannel = "email" | "push" | "both";
 
 export type AppRecord = {
   id: number;
@@ -15,6 +16,12 @@ export type AppRecord = {
 
   createdAt: string;
   updatedAt: string;
+};
+
+export type NotificationSettings = {
+  channel: NotificationChannel;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type IncidentRecord = {
@@ -107,5 +114,37 @@ export async function deleteApp(id: number): Promise<void> {
 export async function refreshApp(id: number): Promise<AppRecord> {
   return request<AppRecord>(`/api/apps/${id}/refresh`, {
     method: "POST",
+  });
+}
+
+export async function getNotificationSettings(): Promise<NotificationSettings> {
+  return request<NotificationSettings>("/api/notification-settings");
+}
+
+export async function updateNotificationSettings(
+  channel: NotificationChannel,
+): Promise<NotificationSettings> {
+  return request<NotificationSettings>("/api/notification-settings", {
+    method: "PUT",
+    body: JSON.stringify({ channel }),
+  });
+}
+
+export async function registerPushToken(input: {
+  token: string;
+  deviceLabel?: string;
+}): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/api/notification-push/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function unregisterPushToken(
+  token: string,
+): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/api/notification-push/unregister", {
+    method: "POST",
+    body: JSON.stringify({ token }),
   });
 }

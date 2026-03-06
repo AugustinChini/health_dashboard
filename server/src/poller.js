@@ -1,30 +1,30 @@
 function withTimeout(ms, controller) {
-  const id = setTimeout(() => controller.abort(), ms)
-  return () => clearTimeout(id)
+  const id = setTimeout(() => controller.abort(), ms);
+  return () => clearTimeout(id);
 }
 
 export async function checkUrl(url, timeoutMs) {
-  const controller = new AbortController()
-  const clear = withTimeout(timeoutMs, controller)
-  const startedAt = Date.now()
+  const controller = new AbortController();
+  const clear = withTimeout(timeoutMs, controller);
+  const startedAt = Date.now();
 
   try {
     const res = await fetch(url, {
-      method: 'GET',
+      method: "GET",
       signal: controller.signal,
-      redirect: 'follow',
-    })
+      redirect: "follow",
+    });
 
-    const latencyMs = Date.now() - startedAt
-    const status = res.status === 200 ? 'ok' : 'fail'
-    let responseSnippet = null
+    const latencyMs = Date.now() - startedAt;
+    const status = res.status === 200 ? "ok" : "fail";
+    let responseSnippet = null;
 
-    if (status !== 'ok') {
+    if (status !== "ok") {
       try {
-        const text = await res.text()
-        responseSnippet = text.slice(0, 2000)
+        const text = await res.text();
+        responseSnippet = text.slice(0, 2000);
       } catch {
-        responseSnippet = null
+        responseSnippet = null;
       }
     }
 
@@ -34,47 +34,55 @@ export async function checkUrl(url, timeoutMs) {
       latencyMs,
       error: null,
       responseSnippet,
-    }
+    };
   } catch (err) {
-    const latencyMs = Date.now() - startedAt
+    const latencyMs = Date.now() - startedAt;
 
-    if (err && typeof err === 'object' && err.name === 'AbortError') {
+    if (err && typeof err === "object" && err.name === "AbortError") {
       return {
-        status: 'timeout',
+        status: "timeout",
         httpCode: null,
         latencyMs: timeoutMs,
-        error: 'timeout',
+        error: "timeout",
         responseSnippet: null,
-      }
+      };
     }
 
     return {
-      status: 'fail',
+      status: "fail",
       httpCode: null,
       latencyMs,
-      error: 'network_error',
+      error: "network_error",
       responseSnippet: null,
-    }
+    };
   } finally {
-    clear()
+    clear();
   }
 }
 
-export async function checkAndPersistApp({ db, app, timeoutMs, emailClient, logger, notify }) {
-  const now = new Date().toISOString()
-  const prevStatus = app.status
+export async function checkAndPersistApp({
+  db,
+  app,
+  timeoutMs,
+  emailClient,
+  pushClient,
+  logger,
+  notify,
+}) {
+  const now = new Date().toISOString();
+  const prevStatus = app.status;
 
-  const result = await checkUrl(app.url, timeoutMs)
-  const nextStatus = result.status
-  const httpCode = result.httpCode
-  const latencyMs = result.latencyMs
-  const error = result.error
-  const responseSnippet = result.responseSnippet
+  const result = await checkUrl(app.url, timeoutMs);
+  const nextStatus = result.status;
+  const httpCode = result.httpCode;
+  const latencyMs = result.latencyMs;
+  const error = result.error;
+  const responseSnippet = result.responseSnippet;
 
-  const statusChanged = prevStatus !== nextStatus
-  const lastStatusChangeAt = statusChanged ? now : app.lastStatusChangeAt
+  const statusChanged = prevStatus !== nextStatus;
+  const lastStatusChangeAt = statusChanged ? now : app.lastStatusChangeAt;
 
-  if (prevStatus === 'ok' && nextStatus !== 'ok') {
+  if (prevStatus === "ok" && nextStatus !== "ok") {
     await db.run(
       `INSERT INTO incidents (
         appId,
@@ -98,17 +106,17 @@ export async function checkAndPersistApp({ db, app, timeoutMs, emailClient, logg
         now,
         now,
       ],
-    )
+    );
   }
 
-  if (prevStatus !== 'ok' && nextStatus === 'ok') {
+  if (prevStatus !== "ok" && nextStatus === "ok") {
     const openIncident = await db.get(
       `SELECT id FROM incidents
        WHERE appId = ? AND endedAt IS NULL
        ORDER BY startedAt DESC
        LIMIT 1`,
       [app.id],
-    )
+    );
 
     if (openIncident) {
       await db.run(
@@ -116,7 +124,7 @@ export async function checkAndPersistApp({ db, app, timeoutMs, emailClient, logg
          SET endedAt = ?, updatedAt = ?
          WHERE id = ?`,
         [now, now, openIncident.id],
-      )
+      );
     }
   }
 
@@ -125,9 +133,16 @@ export async function checkAndPersistApp({ db, app, timeoutMs, emailClient, logg
      SET status = ?, httpCode = ?, latencyMs = ?, checkedAt = ?, lastStatusChangeAt = ?, updatedAt = ?
      WHERE id = ?`,
     [nextStatus, httpCode, latencyMs, now, lastStatusChangeAt, now, app.id],
-  )
+  );
 
-  if (notify && prevStatus === 'ok' && nextStatus !== 'ok') {
+  if (notify && prevStatus === "ok" && nextStatus !== "ok") {
+    const settings = await db.get(
+      "SELECT channel FROM notification_settings WHERE id = 1",
+    );
+    const channel = settings?.channel || "email";
+    const shouldSendEmail = channel === "email" || channel === "both";
+    const shouldSendPush = channel === "push" || channel === "both";
+
     try {
       const updated = {
         ...app,
@@ -136,24 +151,41 @@ export async function checkAndPersistApp({ db, app, timeoutMs, emailClient, logg
         latencyMs,
         checkedAt: now,
         lastStatusChangeAt,
+      };
+
+      if (shouldSendEmail) {
+        await emailClient.sendTransitionEmail({
+          app: updated,
+          fromStatus: prevStatus,
+          toStatus: nextStatus,
+        });
       }
-      await emailClient.sendTransitionEmail({
-        app: updated,
-        fromStatus: prevStatus,
-        toStatus: nextStatus,
-      })
+
+      if (shouldSendPush) {
+        await pushClient.sendTransitionPush({
+          app: updated,
+          fromStatus: prevStatus,
+          toStatus: nextStatus,
+        });
+      }
     } catch (e) {
-      logger?.error?.('email_send_failed', e)
+      logger?.error?.("notification_send_failed", e);
     }
   }
 
-  const row = await db.get('SELECT * FROM apps WHERE id = ?', [app.id])
-  return row
+  const row = await db.get("SELECT * FROM apps WHERE id = ?", [app.id]);
+  return row;
 }
 
-export function createPoller({ db, timeoutMs, emailClient, logger }) {
+export function createPoller({
+  db,
+  timeoutMs,
+  emailClient,
+  pushClient,
+  logger,
+}) {
   async function pollOnce() {
-    const apps = await db.all('SELECT * FROM apps ORDER BY id DESC')
+    const apps = await db.all("SELECT * FROM apps ORDER BY id DESC");
 
     for (const app of apps) {
       await checkAndPersistApp({
@@ -161,11 +193,12 @@ export function createPoller({ db, timeoutMs, emailClient, logger }) {
         app,
         timeoutMs,
         emailClient,
+        pushClient,
         logger,
         notify: true,
-      })
+      });
     }
   }
 
-  return { pollOnce }
+  return { pollOnce };
 }
