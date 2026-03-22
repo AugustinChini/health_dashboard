@@ -1,13 +1,44 @@
 import "./App.css";
 
+import { useCallback, useEffect, useState } from "react";
 import { HashRouter, NavLink, Route, Routes } from "react-router-dom";
 
+import { getStoredAuthToken, verifyAuthToken } from "./api/apps";
 import AppsPage from "./pages/AppsPage";
 import AppDetailsPage from "./pages/AppDetailsPage";
 import DashboardPage from "./pages/DashboardPage";
+import LoginPage from "./pages/LoginPage";
 import NotificationsPage from "./pages/NotificationsPage";
 
 function App() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
+  const checkAuth = useCallback(async () => {
+    const token = getStoredAuthToken();
+    if (!token) {
+      setAuthed(false);
+      return;
+    }
+    const valid = await verifyAuthToken();
+    setAuthed(valid);
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+
+    const onLogout = () => setAuthed(false);
+    window.addEventListener("auth:logout", onLogout);
+    return () => window.removeEventListener("auth:logout", onLogout);
+  }, [checkAuth]);
+
+  if (authed === null) {
+    return null;
+  }
+
+  if (!authed) {
+    return <LoginPage onSuccess={() => setAuthed(true)} />;
+  }
+
   return (
     <HashRouter>
       <div className="page">

@@ -1,6 +1,8 @@
+import crypto from "node:crypto";
 import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
+import jwt from "jsonwebtoken";
 
 import { openDb, seedIfEmpty } from "./db.js";
 import { createEmailClientFromEnv } from "./email.js";
@@ -17,6 +19,14 @@ const POLL_INTERVAL_MS = process.env.POLL_INTERVAL_MS
 const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
   ? Number(process.env.REQUEST_TIMEOUT_MS)
   : 10_000;
+
+const PIN_CODE = process.env.PIN_CODE || "";
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
+const JWT_EXPIRY = "30d";
+
+if (!PIN_CODE) {
+  console.warn("[auth] WARNING: PIN_CODE is not set — auth endpoints will reject all logins");
+}
 
 const app = express();
 app.use(express.json());
@@ -65,6 +75,68 @@ function normalizeIncidentRow(row) {
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
+
+// ── Auth ────────────────────────────────────────────────────────────────
+
+app.post("/auth/login", (req, res) => {
+  const pin = String(req.body?.pin || "").trim();
+
+  if (!PIN_CODE) {
+    res.status(500).json({ error: "PIN_CODE is not configured on the server" });
+    return;
+  }
+
+  if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    res.status(400).json({ error: "Pin must be exactly 4 digits" });
+    return;
+  }
+
+  if (!crypto.timingSafeEqual(Buffer.from(pin), Buffer.from(PIN_CODE))) {
+    res.status(401).json({ error: "Invalid pin code" });
+    return;
+  }
+
+  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+  res.json({ token });
+});
+
+app.get("/auth/verify", (req, res) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+
+  if (!token) {
+    res.status(401).json({ error: "No token" });
+    return;
+  }
+
+  try {
+    jwt.verify(token, JWT_SECRET);
+    res.json({ ok: true });
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
+});
+
+// ── Auth middleware (protects everything below) ─────────────────────────
+
+app.use((req, res, next) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+
+  if (!token) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
+});
+
+// ── Protected routes ────────────────────────────────────────────────────
 
 app.get("/notification-settings", async (_req, res) => {
   const row = await db.get(
@@ -144,6 +216,33 @@ app.post("/notification-push/unregister", async (req, res) => {
   }
 
   await pushClient.deactivateTokens([token]);
+  res.status(200).json({ ok: true });
+});
+
+app.get("/notification-push/tokens", async (_req, res) => {
+  const rows = await db.all(
+    "SELECT id, token, deviceLabel, createdAt, updatedAt, lastUsedAt FROM push_tokens WHERE isActive = 1 ORDER BY createdAt DESC",
+  );
+  res.json(rows);
+});
+
+app.delete("/notification-push/tokens/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "invalid id" });
+    return;
+  }
+
+  const row = await db.get(
+    "SELECT token FROM push_tokens WHERE id = ? AND isActive = 1",
+    [id],
+  );
+  if (!row) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+
+  await pushClient.deactivateTokens([row.token]);
   res.status(200).json({ ok: true });
 });
 

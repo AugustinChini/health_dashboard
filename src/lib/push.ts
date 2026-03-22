@@ -71,5 +71,14 @@ export async function subscribeCurrentDeviceToPush(): Promise<string> {
     throw new Error("Failed to retrieve push token from Firebase.");
   }
 
+  localStorage.setItem("push_token", token);
   return token;
+}
+
+/**
+ * Try to retrieve the current device's push token from localStorage.
+ * Returns null if the device was never subscribed from this browser.
+ */
+export function getCurrentDeviceToken(): string | null {
+  return localStorage.getItem("push_token");
 }

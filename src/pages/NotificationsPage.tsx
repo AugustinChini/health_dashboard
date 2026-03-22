@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 
 import {
+  deletePushToken,
   getNotificationSettings,
-  registerPushToken,
+  listPushTokens,
   type NotificationChannel,
+  type PushTokenRecord,
+  registerPushToken,
+  unregisterPushToken,
   updateNotificationSettings,
 } from "../api/apps";
-import { subscribeCurrentDeviceToPush } from "../lib/push";
+import { getCurrentDeviceToken, subscribeCurrentDeviceToPush } from "../lib/push";
 
 const CHANNEL_OPTIONS: Array<{ value: NotificationChannel; label: string }> = [
   { value: "email", label: "Email only" },
@@ -24,6 +28,11 @@ function buildDeviceLabel() {
   return `${platform} | ${ua.slice(0, 80)}`;
 }
 
+function formatDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString();
+}
+
 export default function NotificationsPage() {
   const [channel, setChannel] = useState<NotificationChannel>("email");
   const [loading, setLoading] = useState(true);
@@ -31,6 +40,21 @@ export default function NotificationsPage() {
   const [subscribing, setSubscribing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [tokens, setTokens] = useState<PushTokenRecord[]>([]);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [unsubscribing, setUnsubscribing] = useState(false);
+
+  const currentToken = getCurrentDeviceToken();
+
+  function loadTokens() {
+    setTokensLoading(true);
+    listPushTokens()
+      .then(setTokens)
+      .catch(() => {})
+      .finally(() => setTokensLoading(false));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +78,8 @@ export default function NotificationsPage() {
         if (cancelled) return;
         setLoading(false);
       });
+
+    loadTokens();
 
     return () => {
       cancelled = true;
@@ -90,6 +116,7 @@ export default function NotificationsPage() {
         deviceLabel: buildDeviceLabel(),
       });
       setMessage("This device is now subscribed to push notifications.");
+      loadTokens();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Failed to subscribe this device",
@@ -98,6 +125,49 @@ export default function NotificationsPage() {
       setSubscribing(false);
     }
   }
+
+  async function handleUnsubscribeCurrent() {
+    if (!currentToken) return;
+    setUnsubscribing(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      await unregisterPushToken(currentToken);
+      localStorage.removeItem("push_token");
+      setMessage("This device has been unsubscribed.");
+      loadTokens();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Failed to unsubscribe this device",
+      );
+    } finally {
+      setUnsubscribing(false);
+    }
+  }
+
+  async function handleDeleteToken(id: number) {
+    setDeletingId(id);
+    setError(null);
+    setMessage(null);
+
+    try {
+      await deletePushToken(id);
+      setMessage("Subscription removed.");
+      loadTokens();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Failed to remove subscription",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const currentTokenRecord = currentToken
+    ? tokens.find((t) => t.token === currentToken)
+    : null;
+  const otherTokens = tokens.filter((t) => t.token !== currentToken);
 
   return (
     <div>
@@ -160,6 +230,61 @@ export default function NotificationsPage() {
             ? "Subscribing..."
             : "Add this device to push notifications"}
         </button>
+      </section>
+
+      <section className="panel">
+        <div className="panel__title">Subscribed devices</div>
+
+        {tokensLoading ? (
+          <p className="notificationsHint">Loading...</p>
+        ) : tokens.length === 0 ? (
+          <p className="notificationsHint">No devices subscribed yet.</p>
+        ) : (
+          <div className="tokenList">
+            {currentTokenRecord && (
+              <div className="tokenList__item tokenList__item--current">
+                <div className="tokenList__info">
+                  <span className="tokenList__label">
+                    {currentTokenRecord.deviceLabel || "Unknown device"}
+                  </span>
+                  <span className="tokenList__badge">This device</span>
+                  <span className="tokenList__date">
+                    Subscribed {formatDate(currentTokenRecord.createdAt)}
+                  </span>
+                </div>
+                <button
+                  className="btn btn--danger btn--sm"
+                  type="button"
+                  disabled={unsubscribing}
+                  onClick={handleUnsubscribeCurrent}
+                >
+                  {unsubscribing ? "Unsubscribing..." : "Unsubscribe"}
+                </button>
+              </div>
+            )}
+
+            {otherTokens.map((t) => (
+              <div key={t.id} className="tokenList__item">
+                <div className="tokenList__info">
+                  <span className="tokenList__label">
+                    {t.deviceLabel || "Unknown device"}
+                  </span>
+                  <span className="tokenList__date">
+                    Subscribed {formatDate(t.createdAt)}
+                  </span>
+                </div>
+                <button
+                  className="btn btn--danger btn--sm"
+                  type="button"
+                  disabled={deletingId === t.id}
+                  onClick={() => handleDeleteToken(t.id)}
+                >
+                  {deletingId === t.id ? "Removing..." : "Remove"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {message ? (

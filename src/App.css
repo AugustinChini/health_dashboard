@@ -1,3 +1,92 @@
+/* ── Login / Pin pad ──────────────────────────────────────────────────── */
+
+.loginPage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.loginCard {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.loginCard__prompt {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.loginCard__error {
+  font-size: 13px;
+  color: rgba(254, 202, 202, 0.98);
+  text-align: center;
+}
+
+.pinDots {
+  display: flex;
+  gap: 14px;
+}
+
+.pinDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.pinDot--filled {
+  background: rgba(99, 102, 241, 1);
+  border-color: rgba(99, 102, 241, 1);
+}
+
+.pinPad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 260px;
+}
+
+.pinPad__key {
+  height: 56px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+
+.pinPad__key:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.pinPad__key:active {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.pinPad__key--delete {
+  font-size: 18px;
+}
+
+.pinPad__key:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── App layout ──────────────────────────────────────────────────────── */
+
 .page {
   min-height: 100vh;
 }
@@ -138,6 +227,64 @@
   margin: 10px 0 14px;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.72);
+}
+
+.tokenList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tokenList__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tokenList__item--current {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.tokenList__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tokenList__label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tokenList__badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.25);
+  color: rgba(199, 210, 254, 0.95);
+}
+
+.tokenList__date {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.btn--sm {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .notificationsMessage {

@@ -12,6 +12,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "firebase-admin": "^13.6.0",
+    "jsonwebtoken": "^9.0.3",
     "nodemailer": "^6.9.16",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7"
